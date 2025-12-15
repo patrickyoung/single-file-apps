@@ -873,6 +873,106 @@ STATE.worker.onmessage = (e) => {
     }
 };
 
+// Attach event listeners after initialization
+attachEventListeners();
+}
+
+function attachEventListeners() {
+// Generate Button
+document.getElementById('generate-btn').addEventListener('click', async () => {
+const fileInput = document.getElementById('img-upload');
+if (!fileInput.files.length) {
+alert("Please select an image first.");
+return;
+}
+// Read Image
+const file = fileInput.files[0];
+const img = new Image();
+img.src = URL.createObjectURL(file);
+await new Promise(r => img.onload = r);
+
+// Setup scaling for planner
+const MAX_DIM = 1024;
+let w = img.width, h = img.height;
+if (w > MAX_DIM || h > MAX_DIM) {
+    const r = Math.min(MAX_DIM/w, MAX_DIM/h);
+    w = Math.floor(w*r);
+    h = Math.floor(h*r);
+}
+
+// Draw to temp canvas to get pixels
+const c = document.createElement('canvas');
+c.width = w; c.height = h;
+const ctx = c.getContext('2d');
+ctx.drawImage(img, 0, 0, w, h);
+const pixels = ctx.getImageData(0,0,w,h);
+
+// Reset State
+STATE.requestId++;
+STATE.isPlaying = true;
+STATE.totalStrokes = 1000; // placeholder
+STATE.renderedStrokes = 0;
+STATE.preset = document.getElementById('preset-select').value;
+STATE.quality = document.getElementById('quality-select').value;
+STATE.indicator = document.getElementById('indicator-select').value;
+STATE.seed = parseInt(document.getElementById('seed-input').value);
+
+// UI Updates
+document.getElementById('ui-panel').classList.add('collapsed');
+document.getElementById('toggle-ui').style.display = 'block';
+document.getElementById('status-bar').classList.remove('hidden');
+document.getElementById('playback-area').classList.remove('hidden');
+document.getElementById('stage-label').innerText = "Planning...";
+document.getElementById('generate-btn').innerText = "Generating...";
+document.getElementById('generate-btn').disabled = true;
+
+// Reset Renderer
+renderer.reset(img.width, img.height); // Use original aspect ratio
+
+// Init Worker
+STATE.worker.postMessage({
+    type: 'INIT',
+    requestId: STATE.requestId,
+    config: {
+        seed: STATE.seed,
+        preset: STATE.preset,
+        quality: STATE.quality
+    }
+});
+
+// Send Image
+STATE.worker.postMessage({
+    type: 'IMAGE',
+    requestId: STATE.requestId,
+    width: w,
+    height: h,
+    buffer: pixels.data.buffer
+}, [pixels.data.buffer]);
+
+});
+
+// Playback Controls
+document.getElementById('btn-pause').addEventListener('click', (e) => {
+STATE.isPlaying = !STATE.isPlaying;
+e.target.innerText = STATE.isPlaying ? "Pause" : "Play";
+});
+
+[1, 2, 4].forEach(x => {
+document.getElementById(`btn-${x}x`).addEventListener('click', () => {
+STATE.speedMultiplier = x;
+});
+});
+
+// UI Toggle
+document.getElementById('toggle-ui').addEventListener('click', () => {
+document.getElementById('ui-panel').classList.remove('collapsed');
+document.getElementById('toggle-ui').style.display = 'none';
+});
+
+// Random Seed Button
+document.getElementById('rnd-seed-btn').addEventListener('click', () => {
+document.getElementById('seed-input').value = Math.floor(Math.random() * 100000);
+});
 }
 function updateProgress() {
 if (STATE.totalStrokes === 0) return;
@@ -955,24 +1055,6 @@ STATE.worker.postMessage({
     buffer: pixels.data.buffer
 }, [pixels.data.buffer]);
 
-});
-// Playback Controls
-document.getElementById('btn-pause').addEventListener('click', (e) => {
-STATE.isPlaying = !STATE.isPlaying;
-e.target.innerText = STATE.isPlaying ? "Pause" : "Play";
-});
-[1, 2, 4].forEach(x => {
-document.getElementById(`btn-${x}x`).addEventListener('click', () => {
-STATE.speedMultiplier = x;
-});
-});
-// UI Toggle
-document.getElementById('toggle-ui').addEventListener('click', () => {
-document.getElementById('ui-panel').classList.remove('collapsed');
-document.getElementById('toggle-ui').style.display = 'none';
-});
-document.getElementById('rnd-seed-btn').addEventListener('click', () => {
-document.getElementById('seed-input').value = Math.floor(Math.random() * 100000);
 });
 // Boot
 window.onload = init;
