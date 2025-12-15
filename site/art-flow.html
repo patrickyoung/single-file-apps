@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Canvas Artist | Generative Painting</title>
-<script src="[https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js](https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js)"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js"></script>
 
 <style>
     :root {
@@ -274,7 +274,7 @@ if (x < 0 || x >= imgData.width || y < 0 || y >= imgData.height) return [0,0,0,0
 const i = (Math.floor(y) * imgData.width + Math.floor(x)) * 4;
 return [imgData.data[i], imgData.data[i+1], imgData.data[i+2], imgData.data[i+3]];
 }
-function getLuminance(r, g, b) { return 0.299r + 0.587g + 0.114*b; }
+function getLuminance(r, g, b) { return 0.299*r + 0.587*g + 0.114*b; }
 // Simple Sobel gradient
 function getGradient(x, y) {
 const kx = [
@@ -288,8 +288,8 @@ const ky = [
 [1, 2, 1]
 ];
 let gx = 0, gy = 0;
-for(let j=-1; j&lt;=1; j++) {
-    for(let i=-1; i&lt;=1; i++) {
+for(let j=-1; j<=1; j++) {
+    for(let i=-1; i<=1; i++) {
         const p = getPixel(x+i, y+j);
         const lum = getLuminance(p[0], p[1], p[2]);
         gx += lum * kx[j+1][i+1];
@@ -302,16 +302,16 @@ return { mag: Math.sqrt(gx*gx + gy*gy), dir: Math.atan2(gy, gx) };
 /* --- LOGIC --- */
 self.onmessage = function(e) {
 const msg = e.data;
-if (msg.type === &#39;INIT&#39;) {
+if (msg.type === 'INIT') {
     config = msg.config;
     seed(config.seed);
     isCancelled = false;
-    postMessage({ type: &#39;READY&#39;, requestId: msg.requestId });
+    postMessage({ type: 'READY', requestId: msg.requestId });
 }
-else if (msg.type === &#39;CANCEL&#39;) {
+else if (msg.type === 'CANCEL') {
     isCancelled = true;
 }
-else if (msg.type === &#39;IMAGE&#39;) {
+else if (msg.type === 'IMAGE') {
     handleImage(msg);
 }
 
@@ -326,8 +326,8 @@ const startT = performance.now();
 let totalStrokes = 0;
 
 // Phase 1: Sketch (Edges)
-if (!isCancelled &amp;&amp; (config.preset === &#39;sketch&#39; || config.preset === &#39;ink&#39; || config.preset === &#39;painterly&#39;)) {
-    postMessage({ type: &#39;PROGRESS&#39;, stage: &#39;Sketching&#39;, progress: 0.1, requestId: msg.requestId });
+if (!isCancelled && (config.preset === 'sketch' || config.preset === 'ink' || config.preset === 'painterly')) {
+    postMessage({ type: 'PROGRESS', stage: 'Sketching', progress: 0.1, requestId: msg.requestId });
     const strokes = generateEdgeStrokes();
     totalStrokes += strokes.length;
     sendStrokes(strokes, msg.requestId, totalStrokes);
@@ -335,28 +335,28 @@ if (!isCancelled &amp;&amp; (config.preset === &#39;sketch&#39; || config.preset
 
 // Phase 2: Painting (Coarse to Fine)
 if (!isCancelled) {
-    const passes = config.quality === &#39;high&#39; ? [40, 20, 10, 5] : 
-                   config.quality === &#39;low&#39; ? [32, 16] : [32, 16, 8];
+    const passes = config.quality === 'high' ? [40, 20, 10, 5] : 
+                   config.quality === 'low' ? [32, 16] : [32, 16, 8];
 
-    for (let i = 0; i &lt; passes.length; i++) {
+    for (let i = 0; i < passes.length; i++) {
         if (isCancelled) break;
         const gridSize = passes[i];
 
-        // Adaptive sampling: only paint if variance/detail exists or if it&#39;s the base layer
+        // Adaptive sampling: only paint if variance/detail exists or if it's the base layer
         const isBase = (i === 0);
         const strokes = generatePaintStrokes(gridSize, isBase);
 
         totalStrokes += strokes.length;
-        postMessage({ type: &#39;PROGRESS&#39;, stage: `Painting (Pass ${i+1}/${passes.length})`, progress: 0.2 + (0.8 * (i/passes.length)), requestId: msg.requestId });
+        postMessage({ type: 'PROGRESS', stage: `Painting (Pass ${i+1}/${passes.length})`, progress: 0.2 + (0.8 * (i/passes.length)), requestId: msg.requestId });
         sendStrokes(strokes, msg.requestId, totalStrokes);
 
         // Breathe
-        await new Promise(r =&gt; setTimeout(r, 10));
+        await new Promise(r => setTimeout(r, 10));
     }
 }
 
 postMessage({ 
-    type: &#39;DONE&#39;, 
+    type: 'DONE', 
     requestId: msg.requestId, 
     totalStrokes: totalStrokes,
     planningMs: performance.now() - startT
@@ -367,19 +367,19 @@ function generateEdgeStrokes() {
 const strokes = [];
 const step = 4;
 const threshold = 100; // Edge threshold
-for (let y = step; y &lt; imgData.height - step; y += step) {
-    for (let x = step; x &lt; imgData.width - step; x += step) {
-        if (random() &gt; 0.6) continue; // Stochastic sampling
+for (let y = step; y < imgData.height - step; y += step) {
+    for (let x = step; x < imgData.width - step; x += step) {
+        if (random() > 0.6) continue; // Stochastic sampling
 
         const g = getGradient(x, y);
-        if (g.mag &gt; threshold) {
+        if (g.mag > threshold) {
             // Create a short stroke along the edge (perpendicular to gradient)
             const angle = g.dir + Math.PI / 2;
             const len = randRange(5, 15);
 
             const p = getPixel(x,y);
             strokes.push({
-                type: &#39;sketch&#39;,
+                type: 'sketch',
                 points: new Float32Array([
                     x - Math.cos(angle)*len, y - Math.sin(angle)*len,
                     x + Math.cos(angle)*len, y + Math.sin(angle)*len
@@ -401,10 +401,10 @@ const varianceThreshold = 20;
 const startX = Math.floor(randRange(0, gridSize));
 const startY = Math.floor(randRange(0, gridSize));
 
-for (let y = startY; y &lt; imgData.height; y += gridSize) {
-    for (let x = startX; x &lt; imgData.width; x += gridSize) {
+for (let y = startY; y < imgData.height; y += gridSize) {
+    for (let x = startX; x < imgData.width; x += gridSize) {
         // Check bounds
-        if (x &gt;= imgData.width || y &gt;= imgData.height) continue;
+        if (x >= imgData.width || y >= imgData.height) continue;
 
         const p = getPixel(x, y);
 
@@ -414,7 +414,7 @@ for (let y = startY; y &lt; imgData.height; y += gridSize) {
             // Simple variance check: compare center to corners
             const p2 = getPixel(Math.min(x+gridSize/2, imgData.width-1), y);
             const diff = Math.abs(p[0]-p2[0]) + Math.abs(p[1]-p2[1]) + Math.abs(p[2]-p2[2]);
-            if (diff &gt; varianceThreshold) needsStroke = true;
+            if (diff > varianceThreshold) needsStroke = true;
         }
 
         if (needsStroke) {
@@ -425,7 +425,7 @@ for (let y = startY; y &lt; imgData.height; y += gridSize) {
 
             // Construct stroke
             strokes.push({
-                type: &#39;paint&#39;,
+                type: 'paint',
                 points: new Float32Array([
                     x - Math.cos(angle)*len*0.5, y - Math.sin(angle)*len*0.5,
                     x, y,
@@ -440,7 +440,7 @@ for (let y = startY; y &lt; imgData.height; y += gridSize) {
 }
 
 // Shuffle strokes to avoid grid artifacts
-for (let i = strokes.length - 1; i &gt; 0; i--) {
+for (let i = strokes.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
     [strokes[i], strokes[j]] = [strokes[j], strokes[i]];
 }
@@ -496,31 +496,31 @@ drawFn(ctx, size);
 return PIXI.Texture.from(c);
 };
     return {
-        round: create((ctx, s) =&gt; {
+        round: create((ctx, s) => {
             ctx.beginPath();
             ctx.arc(s/2, s/2, s/2 * 0.8, 0, Math.PI*2);
-            ctx.fillStyle = &#39;#FFF&#39;;
+            ctx.fillStyle = '#FFF';
             ctx.fill();
         }, 64),
 
-        soft: create((ctx, s) =&gt; {
+        soft: create((ctx, s) => {
             const g = ctx.createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
-            g.addColorStop(0, &#39;rgba(255,255,255,1)&#39;);
-            g.addColorStop(1, &#39;rgba(255,255,255,0)&#39;);
+            g.addColorStop(0, 'rgba(255,255,255,1)');
+            g.addColorStop(1, 'rgba(255,255,255,0)');
             ctx.fillStyle = g;
             ctx.fillRect(0,0,s,s);
         }, 64),
 
-        sketch: create((ctx, s) =&gt; {
-            ctx.fillStyle = &#39;#FFF&#39;;
-            for(let i=0; i&lt;30; i++) {
+        sketch: create((ctx, s) => {
+            ctx.fillStyle = '#FFF';
+            for(let i=0; i<30; i++) {
                 ctx.fillRect(Math.random()*s, Math.random()*s, 2, 2);
             }
             ctx.beginPath();
             ctx.moveTo(0, s/2);
             ctx.lineTo(s, s/2);
             ctx.lineWidth = 2;
-            ctx.strokeStyle = &#39;#FFF&#39;;
+            ctx.strokeStyle = '#FFF';
             ctx.stroke();
         }, 32)
     };
@@ -551,7 +551,7 @@ async init() {
             resizeTo: this.container,
             backgroundColor: 0xF0F0F0, // Paper color
             antialias: false, // Performance
-            powerPreference: &#39;high-performance&#39;
+            powerPreference: 'high-performance'
         });
         this.container.appendChild(this.app.view);
 
@@ -584,7 +584,7 @@ async init() {
 
         return true;
     } catch (e) {
-        console.error(&quot;Pixi init failed&quot;, e);
+        console.error("Pixi init failed", e);
         return false;
     }
 }
@@ -617,9 +617,9 @@ reset(width, height) {
 
 addStrokes(batch) {
     // Pre-process points to screen space to save time in render loop
-    batch.forEach(s =&gt; {
+    batch.forEach(s => {
         const screenPts = [];
-        for(let i=0; i&lt;s.points.length; i+=2) {
+        for(let i=0; i<s.points.length; i+=2) {
             screenPts.push(
                 s.points[i] * this.transform.scale + this.transform.x,
                 s.points[i+1] * this.transform.scale + this.transform.y
@@ -634,12 +634,12 @@ tick(delta) {
     if (!STATE.isPlaying) return;
 
     // Adaptive Performance
-    if (this.app.ticker.FPS &lt; 30) this.fpsDropCount++;
+    if (this.app.ticker.FPS < 30) this.fpsDropCount++;
     else this.fpsDropCount = Math.max(0, this.fpsDropCount - 1);
 
-    if (this.fpsDropCount &gt; 60 &amp;&amp; !this.degraded) {
+    if (this.fpsDropCount > 60 && !this.degraded) {
         this.degraded = true;
-        document.getElementById(&#39;perf-stats&#39;).innerText = &quot;High Load: Adaptive mode enabled&quot;;
+        document.getElementById('perf-stats').innerText = "High Load: Adaptive mode enabled";
     }
 
     // Process Queue
@@ -647,7 +647,7 @@ tick(delta) {
     let strokesToSpawn = this.degraded ? 1 : 2; 
     strokesToSpawn = Math.ceil(strokesToSpawn * STATE.speedMultiplier * (delta/1));
 
-    for(let i=0; i&lt;strokesToSpawn; i++) {
+    for(let i=0; i<strokesToSpawn; i++) {
         if (this.strokesQueue.length === 0) break;
         const data = this.strokesQueue.shift();
         this.spawnStroke(data);
@@ -659,11 +659,11 @@ tick(delta) {
     const toRemove = [];
     const stampSpacing = this.degraded ? 0.4 : 0.2; // fraction of width
 
-    for(let i=0; i&lt;this.activeStrokes.children.length; i++) {
+    for(let i=0; i<this.activeStrokes.children.length; i++) {
         const s = this.activeStrokes.children[i];
         s.userData.t += 0.05 * STATE.speedMultiplier; // Progress
 
-        if (s.userData.t &gt;= 1.0) {
+        if (s.userData.t >= 1.0) {
             // Done
             toRemove.push(s);
             // Last position update
@@ -677,7 +677,7 @@ tick(delta) {
 
             // Stamp?
             const distSinceStamp = Math.hypot(cx - s.userData.lastX, cy - s.userData.lastY);
-            if (distSinceStamp &gt; s.userData.width * stampSpacing) {
+            if (distSinceStamp > s.userData.width * stampSpacing) {
                 this.stamp(s, cx, cy);
                 s.userData.lastX = cx;
                 s.userData.lastY = cy;
@@ -688,9 +688,9 @@ tick(delta) {
     }
 
     // Cleanup finished strokes (But their stamps remain in the container)
-    // Wait... stamps are children of &#39;s&#39;? No, stamps should be children of activeStrokes 
+    // Wait... stamps are children of 's'? No, stamps should be children of activeStrokes 
     // to be independent.
-    // CORRECTION: &#39;s&#39; is a virtual cursor object, we spawn stamps directly into activeStrokes
+    // CORRECTION: 's' is a virtual cursor object, we spawn stamps directly into activeStrokes
     // or a batch container.
 }
 
@@ -712,8 +712,8 @@ spawnStroke(data) {
 }
 
 stamp(tracker, x, y) {
-    const tex = tracker.userData.type === &#39;sketch&#39; ? this.textures.sketch : 
-               (tracker.userData.width &gt; 10 ? this.textures.soft : this.textures.round);
+    const tex = tracker.userData.type === 'sketch' ? this.textures.sketch : 
+               (tracker.userData.width > 10 ? this.textures.soft : this.textures.round);
 
     const sprite = new PIXI.Sprite(tex);
     sprite.anchor.set(0.5);
@@ -729,7 +729,7 @@ stamp(tracker, x, y) {
     this.activeStrokes.addChildAt(sprite, 0);
 
     // Flattening Logic
-    if (this.activeStrokes.children.length &gt; 500) { // Limit live objects
+    if (this.activeStrokes.children.length > 500) { // Limit live objects
         this.bake();
     }
 }
@@ -738,13 +738,13 @@ bake() {
     // Render active strokes to texture, keeping existing content
     this.app.renderer.render(this.activeStrokes, { renderTexture: this.renderTexture, clear: false });
     // Remove sprites, keep trackers
-    const trackers = this.activeStrokes.children.filter(c =&gt; c.userData !== undefined);
+    const trackers = this.activeStrokes.children.filter(c => c.userData !== undefined);
     this.activeStrokes.removeChildren();
-    trackers.forEach(t =&gt; this.activeStrokes.addChild(t));
+    trackers.forEach(t => this.activeStrokes.addChild(t));
 }
 
 updateIndicator(pts, t) {
-    if (STATE.indicator === &#39;none&#39;) {
+    if (STATE.indicator === 'none') {
         this.indicator.visible = false;
         return;
     }
@@ -757,7 +757,7 @@ updateIndicator(pts, t) {
     this.indicator.y = y;
     this.indicator.clear();
 
-    if (STATE.indicator === &#39;inkHead&#39;) {
+    if (STATE.indicator === 'inkHead') {
         this.indicator.beginFill(0x333333);
         this.indicator.drawCircle(0,0,3);
     } else {
@@ -793,7 +793,7 @@ reset(w, h) {
         x: (this.canvas.width - w * scale) / 2,
         y: (this.canvas.height - h * scale) / 2
     };
-    this.ctx.fillStyle = &#39;#FFF&#39;;
+    this.ctx.fillStyle = '#FFF';
     this.ctx.fillRect(0,0,this.canvas.width, this.canvas.height);
     this.queue = [];
 
@@ -802,7 +802,7 @@ reset(w, h) {
 }
 
 addStrokes(batch) {
-    batch.forEach(s =&gt; this.queue.push(s));
+    batch.forEach(s => this.queue.push(s));
 }
 
 loop() {
@@ -811,7 +811,7 @@ loop() {
 
     const count = 5 * STATE.speedMultiplier;
 
-    for(let i=0; i&lt;count &amp;&amp; this.queue.length &gt; 0; i++) {
+    for(let i=0; i<count && this.queue.length > 0; i++) {
         const s = this.queue.shift();
         const ctx = this.ctx;
         ctx.beginPath();
@@ -827,7 +827,7 @@ loop() {
         const c = s.color;
         ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${s.alpha})`;
         ctx.lineWidth = Math.max(1, s.width * this.transform.scale);
-        ctx.lineCap = &#39;round&#39;;
+        ctx.lineCap = 'round';
         ctx.stroke();
 
         STATE.renderedStrokes++;
@@ -845,29 +845,29 @@ const container = document.getElementById('app-container');
 renderer = new PixiRenderer(container);
 const success = await renderer.init();
 if (!success) {
-    document.getElementById(&#39;fallback-banner&#39;).style.display = &#39;block&#39;;
+    document.getElementById('fallback-banner').style.display = 'block';
     renderer = new CanvasRenderer(container);
     renderer.init();
 }
 
 // Init Worker
-const blob = new Blob([document.getElementById(&#39;worker-script&#39;).textContent], {type: &quot;text/javascript&quot;});
+const blob = new Blob([document.getElementById('worker-script').textContent], {type: "text/javascript"});
 STATE.worker = new Worker(window.URL.createObjectURL(blob));
 
-STATE.worker.onmessage = (e) =&gt; {
+STATE.worker.onmessage = (e) => {
     const msg = e.data;
-    if (msg.type === &#39;READY&#39;) {
-        document.getElementById(&#39;generate-btn&#39;).innerText = &quot;GENERATE ART&quot;;
-        document.getElementById(&#39;generate-btn&#39;).disabled = false;
+    if (msg.type === 'READY') {
+        document.getElementById('generate-btn').innerText = "GENERATE ART";
+        document.getElementById('generate-btn').disabled = false;
     } 
-    else if (msg.type === &#39;STROKES&#39;) {
+    else if (msg.type === 'STROKES') {
         STATE.totalStrokes = msg.strokesSoFar; // Approximation until done
         renderer.addStrokes(msg.strokes);
     }
-    else if (msg.type === &#39;PROGRESS&#39;) {
-        document.getElementById(&#39;stage-label&#39;).innerText = msg.stage;
+    else if (msg.type === 'PROGRESS') {
+        document.getElementById('stage-label').innerText = msg.stage;
     }
-    else if (msg.type === &#39;DONE&#39;) {
+    else if (msg.type === 'DONE') {
         STATE.totalStrokes = msg.totalStrokes;
         console.log(`Planning complete: ${msg.planningMs}ms, ${msg.totalStrokes} strokes`);
     }
@@ -878,9 +878,9 @@ function updateProgress() {
 if (STATE.totalStrokes === 0) return;
 const pct = Math.min(100, Math.round((STATE.renderedStrokes / STATE.totalStrokes) * 100));
 document.getElementById('progress-fill').style.width = pct + "%";
-document.getElementById('stroke-count').innerText = ${STATE.renderedStrokes} strokes;
-if (STATE.renderedStrokes &gt;= STATE.totalStrokes &amp;&amp; STATE.totalStrokes &gt; 0) {
-    document.getElementById(&#39;stage-label&#39;).innerText = &quot;Finished&quot;;
+document.getElementById('stroke-count').innerText = `${STATE.renderedStrokes} strokes`;
+if (STATE.renderedStrokes >= STATE.totalStrokes && STATE.totalStrokes > 0) {
+    document.getElementById('stage-label').innerText = "Finished";
 }
 
 }
@@ -895,21 +895,21 @@ return;
 const file = fileInput.files[0];
 const img = new Image();
 img.src = URL.createObjectURL(file);
-await new Promise(r =&gt; img.onload = r);
+await new Promise(r => img.onload = r);
 
 // Setup scaling for planner
 const MAX_DIM = 1024;
 let w = img.width, h = img.height;
-if (w &gt; MAX_DIM || h &gt; MAX_DIM) {
+if (w > MAX_DIM || h > MAX_DIM) {
     const r = Math.min(MAX_DIM/w, MAX_DIM/h);
     w = Math.floor(w*r);
     h = Math.floor(h*r);
 }
 
 // Draw to temp canvas to get pixels
-const c = document.createElement(&#39;canvas&#39;);
+const c = document.createElement('canvas');
 c.width = w; c.height = h;
-const ctx = c.getContext(&#39;2d&#39;);
+const ctx = c.getContext('2d');
 ctx.drawImage(img, 0, 0, w, h);
 const pixels = ctx.getImageData(0,0,w,h);
 
@@ -918,26 +918,26 @@ STATE.requestId++;
 STATE.isPlaying = true;
 STATE.totalStrokes = 1000; // placeholder
 STATE.renderedStrokes = 0;
-STATE.preset = document.getElementById(&#39;preset-select&#39;).value;
-STATE.quality = document.getElementById(&#39;quality-select&#39;).value;
-STATE.indicator = document.getElementById(&#39;indicator-select&#39;).value;
-STATE.seed = parseInt(document.getElementById(&#39;seed-input&#39;).value);
+STATE.preset = document.getElementById('preset-select').value;
+STATE.quality = document.getElementById('quality-select').value;
+STATE.indicator = document.getElementById('indicator-select').value;
+STATE.seed = parseInt(document.getElementById('seed-input').value);
 
 // UI Updates
-document.getElementById(&#39;ui-panel&#39;).classList.add(&#39;collapsed&#39;);
-document.getElementById(&#39;toggle-ui&#39;).style.display = &#39;block&#39;;
-document.getElementById(&#39;status-bar&#39;).classList.remove(&#39;hidden&#39;);
-document.getElementById(&#39;playback-area&#39;).classList.remove(&#39;hidden&#39;);
-document.getElementById(&#39;stage-label&#39;).innerText = &quot;Planning...&quot;;
-document.getElementById(&#39;generate-btn&#39;).innerText = &quot;Generating...&quot;;
-document.getElementById(&#39;generate-btn&#39;).disabled = true;
+document.getElementById('ui-panel').classList.add('collapsed');
+document.getElementById('toggle-ui').style.display = 'block';
+document.getElementById('status-bar').classList.remove('hidden');
+document.getElementById('playback-area').classList.remove('hidden');
+document.getElementById('stage-label').innerText = "Planning...";
+document.getElementById('generate-btn').innerText = "Generating...";
+document.getElementById('generate-btn').disabled = true;
 
 // Reset Renderer
 renderer.reset(img.width, img.height); // Use original aspect ratio
 
 // Init Worker
 STATE.worker.postMessage({
-    type: &#39;INIT&#39;,
+    type: 'INIT',
     requestId: STATE.requestId,
     config: {
         seed: STATE.seed,
@@ -948,7 +948,7 @@ STATE.worker.postMessage({
 
 // Send Image
 STATE.worker.postMessage({
-    type: &#39;IMAGE&#39;,
+    type: 'IMAGE',
     requestId: STATE.requestId,
     width: w,
     height: h,
@@ -962,7 +962,7 @@ STATE.isPlaying = !STATE.isPlaying;
 e.target.innerText = STATE.isPlaying ? "Pause" : "Play";
 });
 [1, 2, 4].forEach(x => {
-document.getElementById(btn-${x}x).addEventListener('click', () => {
+document.getElementById(`btn-${x}x`).addEventListener('click', () => {
 STATE.speedMultiplier = x;
 });
 });
