@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Canvas Artist | Generative Painting</title>
+<script src="[https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js](https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js)"></script>
+
+<style>
+    :root {
+        --bg-color: #1a1a1a;
+        --panel-bg: rgba(20, 20, 20, 0.85);
+        --text-color: #e0e0e0;
+        --accent: #4caf50;
+        --accent-hover: #45a049;
+        --danger: #f44336;
+    }
+
+    body, html {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        overflow: hidden;
+    }
+
+    /* Layout */
+    #app-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    canvas {
+        box-shadow: 0 0 50px rgba(0,0,0,0.5);
+        max-width: 100%;
+        max-height: 100%;
+    }
+
+    /* UI Overlay */
+    #ui-panel {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        width: 300px;
+        background: var(--panel-bg);
+        backdrop-filter: blur(10px);
+        padding: 20px;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.1);
+        transition: transform 0.3s ease;
+        z-index: 100;
+    }
+
+    #ui-panel.collapsed {
+        transform: translateX(calc(-100% - 30px));
+    }
+
+    #toggle-ui {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        z-index: 101;
+        background: var(--panel-bg);
+        border: 1px solid rgba(255,255,255,0.1);
+        color: white;
+        padding: 8px 12px;
+        cursor: pointer;
+        border-radius: 4px;
+        display: none; /* Shown via JS logic */
+    }
+
+    h1 { font-size: 1.2rem; margin: 0 0 15px 0; letter-spacing: 1px; text-transform: uppercase; color: #fff; }
+
+    .control-group { margin-bottom: 15px; }
+    label { display: block; font-size: 0.8rem; margin-bottom: 5px; color: #aaa; }
+
+    select, input[type="text"], input[type="number"] {
+        width: 100%;
+        padding: 8px;
+        background: rgba(0,0,0,0.3);
+        border: 1px solid #444;
+        color: white;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+
+    button {
+        background: var(--accent);
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        width: 100%;
+        transition: background 0.2s;
+    }
+    button:hover { background: var(--accent-hover); }
+    button:disabled { background: #555; cursor: not-allowed; opacity: 0.7; }
+
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; }
+
+    /* Progress Bar */
+    #status-bar {
+        margin-top: 15px;
+        padding-top: 15px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    #progress-text { font-size: 0.8rem; margin-bottom: 5px; display: flex; justify-content: space-between;}
+    #progress-track {
+        height: 4px;
+        background: #333;
+        border-radius: 2px;
+        overflow: hidden;
+    }
+    #progress-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--accent);
+        transition: width 0.2s;
+    }
+
+    /* Playback Controls */
+    .playback-controls { display: flex; gap: 5px; margin-top: 10px; }
+    .playback-controls button { padding: 5px; font-size: 0.8rem; }
+
+    #fallback-banner {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        background: #ff9800;
+        color: black;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        display: none;
+        z-index: 50;
+    }
+
+    .hidden { display: none !important; }
+
+    /* File Upload styling */
+    .file-upload {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+    }
+    .file-upload input[type="file"] {
+        display: none;
+    }
+    .file-upload-label {
+        display: block;
+        padding: 10px;
+        background: #333;
+        border: 1px dashed #666;
+        text-align: center;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        color: #ccc;
+    }
+    .file-upload-label:hover { border-color: #999; color: #fff; }
+
+</style>
+
+</head>
+<body>
+<div id="app-container">
+<div id="fallback-banner">⚠️ Canvas2D Fallback Mode</div>
+</div>
+<button id="toggle-ui">⚙️</button>
+<div id="ui-panel">
+<h1>Canvas Artist</h1>
+<div class="control-group">
+    <div class="file-upload">
+        <label for="img-upload" class="file-upload-label">📁 Choose Image (JPG/PNG)</label>
+        <input type="file" id="img-upload" accept="image/jpeg, image/png, image/webp">
+    </div>
+</div>
+
+<div class="control-group">
+    <label>Preset Style</label>
+    <select id="preset-select">
+        <option value="painterly">Painterly Reveal (Default)</option>
+        <option value="sketch">Pencil Sketch</option>
+        <option value="ink">Ink & Wash</option>
+    </select>
+</div>
+
+<div class="control-group">
+    <div class="row">
+        <div>
+            <label>Quality</label>
+            <select id="quality-select">
+                <option value="low">Low (Fast)</option>
+                <option value="medium" selected>Medium</option>
+                <option value="high">High</option>
+            </select>
+        </div>
+        <div>
+            <label>Mode</label>
+            <select id="indicator-select">
+                <option value="none">None</option>
+                <option value="inkHead">Ink Dot</option>
+                <option value="bloom" selected>Bloom</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<div class="control-group">
+    <label>Seed (Determinism)</label>
+    <div class="row">
+        <input type="number" id="seed-input" value="12345">
+        <button id="rnd-seed-btn" style="flex:0 0 40px;">🎲</button>
+    </div>
+</div>
+
+<button id="generate-btn">GENERATE ART</button>
+
+<div id="playback-area" class="control-group hidden">
+    <label>Playback Speed</label>
+    <div class="playback-controls">
+        <button id="btn-pause">Pause</button>
+        <button id="btn-1x">1x</button>
+        <button id="btn-2x">2x</button>
+        <button id="btn-4x">4x</button>
+    </div>
+</div>
+
+<div id="status-bar" class="hidden">
+    <div id="progress-text">
+        <span id="stage-label">Ready</span>
+        <span id="stroke-count">0 strokes</span>
+    </div>
+    <div id="progress-track">
+        <div id="progress-fill"></div>
+    </div>
+    <div style="font-size: 0.7rem; color: #666; margin-top: 5px;" id="perf-stats"></div>
+</div>
+
+</div>
+<script id="worker-script" type="javascript/worker">
+/**
+ * WORKER: PLANNER
+ * Handles image analysis and stroke generation.
+ * Completely decoupled from rendering.
+   */
+/* --- PRNG --- */
+let seedState = 0;
+function seed(s) { seedState = s | 0; }
+function random() {
+let t = seedState += 0x6D2B79F5;
+t = Math.imul(t ^ t >>> 15, t | 1);
+t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+return ((t ^ t >>> 14) >>> 0) / 4294967296;
+}
+function randRange(min, max) { return min + random() * (max - min); }
+/* --- STATE --- */
+let imgData = null; // { width, height, data: Uint8ClampedArray }
+let config = {};
+let isCancelled = false;
+/* --- UTILS --- */
+function getPixel(x, y) {
+if (x < 0 || x >= imgData.width || y < 0 || y >= imgData.height) return [0,0,0,0];
+const i = (Math.floor(y) * imgData.width + Math.floor(x)) * 4;
+return [imgData.data[i], imgData.data[i+1], imgData.data[i+2], imgData.data[i+3]];
+}
+function getLuminance(r, g, b) { return 0.299r + 0.587g + 0.114*b; }
+// Simple Sobel gradient
+function getGradient(x, y) {
+const kx = [
+[-1, 0, 1],
+[-2, 0, 2],
+[-1, 0, 1]
+];
+const ky = [
+[-1, -2, -1],
+[0, 0, 0],
+[1, 2, 1]
+];
+let gx = 0, gy = 0;
+for(let j=-1; j&lt;=1; j++) {
+    for(let i=-1; i&lt;=1; i++) {
+        const p = getPixel(x+i, y+j);
+        const lum = getLuminance(p[0], p[1], p[2]);
+        gx += lum * kx[j+1][i+1];
+        gy += lum * ky[j+1][i+1];
+    }
+}
+return { mag: Math.sqrt(gx*gx + gy*gy), dir: Math.atan2(gy, gx) };
+
+}
+/* --- LOGIC --- */
+self.onmessage = function(e) {
+const msg = e.data;
+if (msg.type === &#39;INIT&#39;) {
+    config = msg.config;
+    seed(config.seed);
+    isCancelled = false;
+    postMessage({ type: &#39;READY&#39;, requestId: msg.requestId });
+}
+else if (msg.type === &#39;CANCEL&#39;) {
+    isCancelled = true;
+}
+else if (msg.type === &#39;IMAGE&#39;) {
+    handleImage(msg);
+}
+
+};
+async function handleImage(msg) {
+imgData = {
+width: msg.width,
+height: msg.height,
+data: new Uint8ClampedArray(msg.buffer)
+};
+const startT = performance.now();
+let totalStrokes = 0;
+
+// Phase 1: Sketch (Edges)
+if (!isCancelled &amp;&amp; (config.preset === &#39;sketch&#39; || config.preset === &#39;ink&#39; || config.preset === &#39;painterly&#39;)) {
+    postMessage({ type: &#39;PROGRESS&#39;, stage: &#39;Sketching&#39;, progress: 0.1, requestId: msg.requestId });
+    const strokes = generateEdgeStrokes();
+    totalStrokes += strokes.length;
+    sendStrokes(strokes, msg.requestId, totalStrokes);
+}
+
+// Phase 2: Painting (Coarse to Fine)
+if (!isCancelled) {
+    const passes = config.quality === &#39;high&#39; ? [40, 20, 10, 5] : 
+                   config.quality === &#39;low&#39; ? [32, 16] : [32, 16, 8];
+
+    for (let i = 0; i &lt; passes.length; i++) {
+        if (isCancelled) break;
+        const gridSize = passes[i];
+
+        // Adaptive sampling: only paint if variance/detail exists or if it&#39;s the base layer
+        const isBase = (i === 0);
+        const strokes = generatePaintStrokes(gridSize, isBase);
+
+        totalStrokes += strokes.length;
+        postMessage({ type: &#39;PROGRESS&#39;, stage: `Painting (Pass ${i+1}/${passes.length})`, progress: 0.2 + (0.8 * (i/passes.length)), requestId: msg.requestId });
+        sendStrokes(strokes, msg.requestId, totalStrokes);
+
+        // Breathe
+        await new Promise(r =&gt; setTimeout(r, 10));
+    }
+}
+
+postMessage({ 
+    type: &#39;DONE&#39;, 
+    requestId: msg.requestId, 
+    totalStrokes: totalStrokes,
+    planningMs: performance.now() - startT
+});
+
+}
+function generateEdgeStrokes() {
+const strokes = [];
+const step = 4;
+const threshold = 100; // Edge threshold
+for (let y = step; y &lt; imgData.height - step; y += step) {
+    for (let x = step; x &lt; imgData.width - step; x += step) {
+        if (random() &gt; 0.6) continue; // Stochastic sampling
+
+        const g = getGradient(x, y);
+        if (g.mag &gt; threshold) {
+            // Create a short stroke along the edge (perpendicular to gradient)
+            const angle = g.dir + Math.PI / 2;
+            const len = randRange(5, 15);
+
+            const p = getPixel(x,y);
+            strokes.push({
+                type: &#39;sketch&#39;,
+                points: new Float32Array([
+                    x - Math.cos(angle)*len, y - Math.sin(angle)*len,
+                    x + Math.cos(angle)*len, y + Math.sin(angle)*len
+                ]),
+                color: [p[0], p[1], p[2]],
+                alpha: 0.6,
+                width: 1.5
+            });
+        }
+    }
+}
+return strokes;
+
+}
+function generatePaintStrokes(gridSize, isBase) {
+const strokes = [];
+const varianceThreshold = 20;
+// Jitter grid origin
+const startX = Math.floor(randRange(0, gridSize));
+const startY = Math.floor(randRange(0, gridSize));
+
+for (let y = startY; y &lt; imgData.height; y += gridSize) {
+    for (let x = startX; x &lt; imgData.width; x += gridSize) {
+        // Check bounds
+        if (x &gt;= imgData.width || y &gt;= imgData.height) continue;
+
+        const p = getPixel(x, y);
+
+        // Check variance in this block to see if we need detail
+        let needsStroke = isBase;
+        if (!isBase) {
+            // Simple variance check: compare center to corners
+            const p2 = getPixel(Math.min(x+gridSize/2, imgData.width-1), y);
+            const diff = Math.abs(p[0]-p2[0]) + Math.abs(p[1]-p2[1]) + Math.abs(p[2]-p2[2]);
+            if (diff &gt; varianceThreshold) needsStroke = true;
+        }
+
+        if (needsStroke) {
+            // Determine direction based on local structure
+            const g = getGradient(x, y);
+            const angle = g.dir + Math.PI / 2 + (randRange(-0.2, 0.2)); // Slight jitter
+            const len = gridSize * 1.5;
+
+            // Construct stroke
+            strokes.push({
+                type: &#39;paint&#39;,
+                points: new Float32Array([
+                    x - Math.cos(angle)*len*0.5, y - Math.sin(angle)*len*0.5,
+                    x, y,
+                    x + Math.cos(angle)*len*0.5, y + Math.sin(angle)*len*0.5
+                ]),
+                color: [p[0], p[1], p[2]],
+                alpha: isBase ? 0.9 : 0.7,
+                width: gridSize
+            });
+        }
+    }
+}
+
+// Shuffle strokes to avoid grid artifacts
+for (let i = strokes.length - 1; i &gt; 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [strokes[i], strokes[j]] = [strokes[j], strokes[i]];
+}
+
+return strokes;
+
+}
+function sendStrokes(strokes, id, count) {
+// Transfer buffers to avoid copy overhead
+const buffers = strokes.map(s => s.points.buffer);
+postMessage({
+type: 'STROKES',
+requestId: id,
+strokes: strokes,
+strokesSoFar: count
+}, buffers);
+}
+</script>
+<script>
+/**
+ * MAIN APPLICATION
+   */
+// --- PRNG (Duplicate for UI logic) ---
+function mulberry32(a) {
+return function() {
+var t = a += 0x6D2B79F5;
+t = Math.imul(t ^ t >>> 15, t | 1);
+t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+return ((t ^ t >>> 14) >>> 0) / 4294967296;
+}
+}
+// --- CONFIG & STATE ---
+const STATE = {
+seed: 12345,
+preset: 'painterly',
+quality: 'medium',
+indicator: 'bloom',
+isPlaying: false,
+speedMultiplier: 1.0,
+requestId: 0,
+worker: null,
+totalStrokes: 0,
+renderedStrokes: 0
+};
+// --- BRUSH TEXTURE GENERATOR ---
+const TextureGen = {
+createBrushTextures: (app) => {
+const create = (drawFn, size) => {
+const c = document.createElement('canvas');
+c.width = c.height = size;
+const ctx = c.getContext('2d');
+drawFn(ctx, size);
+return PIXI.Texture.from(c);
+};
+    return {
+        round: create((ctx, s) =&gt; {
+            ctx.beginPath();
+            ctx.arc(s/2, s/2, s/2 * 0.8, 0, Math.PI*2);
+            ctx.fillStyle = &#39;#FFF&#39;;
+            ctx.fill();
+        }, 64),
+
+        soft: create((ctx, s) =&gt; {
+            const g = ctx.createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
+            g.addColorStop(0, &#39;rgba(255,255,255,1)&#39;);
+            g.addColorStop(1, &#39;rgba(255,255,255,0)&#39;);
+            ctx.fillStyle = g;
+            ctx.fillRect(0,0,s,s);
+        }, 64),
+
+        sketch: create((ctx, s) =&gt; {
+            ctx.fillStyle = &#39;#FFF&#39;;
+            for(let i=0; i&lt;30; i++) {
+                ctx.fillRect(Math.random()*s, Math.random()*s, 2, 2);
+            }
+            ctx.beginPath();
+            ctx.moveTo(0, s/2);
+            ctx.lineTo(s, s/2);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = &#39;#FFF&#39;;
+            ctx.stroke();
+        }, 32)
+    };
+}
+
+};
+// --- RENDERER (PIXIJS) ---
+class PixiRenderer {
+constructor(container) {
+this.container = container;
+this.app = null;
+this.strokesQueue = [];
+this.textures = {};
+this.activeStrokes = null; // Container for active animations
+this.bakedLayer = null; // Sprite showing the baked texture
+this.renderTexture = null;
+    // Indicator
+    this.indicator = null;
+
+    // Stats
+    this.fpsDropCount = 0;
+    this.degraded = false;
+}
+
+async init() {
+    try {
+        this.app = new PIXI.Application({
+            resizeTo: this.container,
+            backgroundColor: 0xF0F0F0, // Paper color
+            antialias: false, // Performance
+            powerPreference: &#39;high-performance&#39;
+        });
+        this.container.appendChild(this.app.view);
+
+        // Generate textures
+        this.textures = TextureGen.createBrushTextures(this.app);
+
+        // Layers
+        // 1. Baked Layer (RenderTexture)
+        this.renderTexture = PIXI.RenderTexture.create({
+            width: this.app.screen.width, 
+            height: this.app.screen.height
+        });
+        this.bakedLayer = new PIXI.Sprite(this.renderTexture);
+        this.app.stage.addChild(this.bakedLayer);
+
+        // 2. Active Strokes Layer
+        this.activeStrokes = new PIXI.Container();
+        this.app.stage.addChild(this.activeStrokes);
+
+        // 3. Indicator Layer
+        this.indicator = new PIXI.Graphics();
+        this.indicator.beginFill(0xFF0000);
+        this.indicator.drawCircle(0,0,5);
+        this.indicator.endFill();
+        this.indicator.visible = false;
+        this.app.stage.addChild(this.indicator);
+
+        // Loop
+        this.app.ticker.add(this.tick.bind(this));
+
+        return true;
+    } catch (e) {
+        console.error(&quot;Pixi init failed&quot;, e);
+        return false;
+    }
+}
+
+reset(width, height) {
+    // Clear queue
+    this.strokesQueue = [];
+    this.activeStrokes.removeChildren();
+
+    // Resize render texture if needed
+    if (this.renderTexture.width !== this.app.screen.width || this.renderTexture.height !== this.app.screen.height) {
+        this.renderTexture.resize(this.app.screen.width, this.app.screen.height);
+    }
+
+    // Clear Render Texture (Fill white)
+    const bg = new PIXI.Graphics();
+    bg.beginFill(0xFFFFFF); // Paper white
+    bg.drawRect(0,0, this.renderTexture.width, this.renderTexture.height);
+    bg.endFill();
+    this.app.renderer.render(bg, { renderTexture: this.renderTexture, clear: true });
+
+    // Calculate Scale to Fit
+    const scale = Math.min(this.app.screen.width / width, this.app.screen.height / height) * 0.9;
+    this.transform = {
+        scale: scale,
+        x: (this.app.screen.width - width * scale) / 2,
+        y: (this.app.screen.height - height * scale) / 2
+    };
+}
+
+addStrokes(batch) {
+    // Pre-process points to screen space to save time in render loop
+    batch.forEach(s =&gt; {
+        const screenPts = [];
+        for(let i=0; i&lt;s.points.length; i+=2) {
+            screenPts.push(
+                s.points[i] * this.transform.scale + this.transform.x,
+                s.points[i+1] * this.transform.scale + this.transform.y
+            );
+        }
+        s.screenPts = screenPts;
+        this.strokesQueue.push(s);
+    });
+}
+
+tick(delta) {
+    if (!STATE.isPlaying) return;
+
+    // Adaptive Performance
+    if (this.app.ticker.FPS &lt; 30) this.fpsDropCount++;
+    else this.fpsDropCount = Math.max(0, this.fpsDropCount - 1);
+
+    if (this.fpsDropCount &gt; 60 &amp;&amp; !this.degraded) {
+        this.degraded = true;
+        document.getElementById(&#39;perf-stats&#39;).innerText = &quot;High Load: Adaptive mode enabled&quot;;
+    }
+
+    // Process Queue
+    // Calculate budget: how many strokes to start this frame?
+    let strokesToSpawn = this.degraded ? 1 : 2; 
+    strokesToSpawn = Math.ceil(strokesToSpawn * STATE.speedMultiplier * (delta/1));
+
+    for(let i=0; i&lt;strokesToSpawn; i++) {
+        if (this.strokesQueue.length === 0) break;
+        const data = this.strokesQueue.shift();
+        this.spawnStroke(data);
+        STATE.renderedStrokes++;
+        updateProgress();
+    }
+
+    // Animate Active Strokes
+    const toRemove = [];
+    const stampSpacing = this.degraded ? 0.4 : 0.2; // fraction of width
+
+    for(let i=0; i&lt;this.activeStrokes.children.length; i++) {
+        const s = this.activeStrokes.children[i];
+        s.userData.t += 0.05 * STATE.speedMultiplier; // Progress
+
+        if (s.userData.t &gt;= 1.0) {
+            // Done
+            toRemove.push(s);
+            // Last position update
+            this.updateIndicator(s.userData.points, 1.0);
+        } else {
+            // Interpolate
+            const p0 = {x: s.userData.points[0], y: s.userData.points[1]};
+            const p1 = {x: s.userData.points[2], y: s.userData.points[3]};
+            const cx = p0.x + (p1.x - p0.x) * s.userData.t;
+            const cy = p0.y + (p1.y - p0.y) * s.userData.t;
+
+            // Stamp?
+            const distSinceStamp = Math.hypot(cx - s.userData.lastX, cy - s.userData.lastY);
+            if (distSinceStamp &gt; s.userData.width * stampSpacing) {
+                this.stamp(s, cx, cy);
+                s.userData.lastX = cx;
+                s.userData.lastY = cy;
+            }
+
+            this.updateIndicator(s.userData.points, s.userData.t);
+        }
+    }
+
+    // Cleanup finished strokes (But their stamps remain in the container)
+    // Wait... stamps are children of &#39;s&#39;? No, stamps should be children of activeStrokes 
+    // to be independent.
+    // CORRECTION: &#39;s&#39; is a virtual cursor object, we spawn stamps directly into activeStrokes
+    // or a batch container.
+}
+
+// Refactored Spawn/Stamp Logic for Performance
+spawnStroke(data) {
+    // Virtual object to track animation state
+    const tracker = new PIXI.Container(); // Invisible container just to hold data in the list
+    tracker.userData = {
+        t: 0,
+        points: data.screenPts, // [x0, y0, x1, y1] (simplified linear for POC)
+        color: data.color,
+        alpha: data.alpha,
+        width: Math.max(1, data.width * this.transform.scale),
+        type: data.type,
+        lastX: data.screenPts[0],
+        lastY: data.screenPts[1]
+    };
+    this.activeStrokes.addChild(tracker);
+}
+
+stamp(tracker, x, y) {
+    const tex = tracker.userData.type === &#39;sketch&#39; ? this.textures.sketch : 
+               (tracker.userData.width &gt; 10 ? this.textures.soft : this.textures.round);
+
+    const sprite = new PIXI.Sprite(tex);
+    sprite.anchor.set(0.5);
+    sprite.x = x;
+    sprite.y = y;
+    sprite.width = tracker.userData.width;
+    sprite.height = tracker.userData.width; // aspect 1:1
+    sprite.tint = PIXI.utils.rgb2hex([tracker.userData.color[0]/255, tracker.userData.color[1]/255, tracker.userData.color[2]/255]);
+    sprite.alpha = tracker.userData.alpha * 0.5; // Accumulate
+    sprite.rotation = Math.random() * Math.PI * 2;
+
+    // Add directly to active container, BUT behind the tracker
+    this.activeStrokes.addChildAt(sprite, 0);
+
+    // Flattening Logic
+    if (this.activeStrokes.children.length &gt; 500) { // Limit live objects
+        this.bake();
+    }
+}
+
+bake() {
+    // Render active strokes to texture, keeping existing content
+    this.app.renderer.render(this.activeStrokes, { renderTexture: this.renderTexture, clear: false });
+    // Remove sprites, keep trackers
+    const trackers = this.activeStrokes.children.filter(c =&gt; c.userData !== undefined);
+    this.activeStrokes.removeChildren();
+    trackers.forEach(t =&gt; this.activeStrokes.addChild(t));
+}
+
+updateIndicator(pts, t) {
+    if (STATE.indicator === &#39;none&#39;) {
+        this.indicator.visible = false;
+        return;
+    }
+
+    const x = pts[0] + (pts[2] - pts[0]) * t;
+    const y = pts[1] + (pts[3] - pts[1]) * t;
+
+    this.indicator.visible = true;
+    this.indicator.x = x;
+    this.indicator.y = y;
+    this.indicator.clear();
+
+    if (STATE.indicator === &#39;inkHead&#39;) {
+        this.indicator.beginFill(0x333333);
+        this.indicator.drawCircle(0,0,3);
+    } else {
+        this.indicator.beginFill(0xFFFFFF, 0.5);
+        this.indicator.drawCircle(0,0,15);
+        this.indicator.endFill();
+        this.indicator.beginFill(0xFFD700, 0.8);
+        this.indicator.drawCircle(0,0,4);
+    }
+    this.indicator.endFill();
+}
+
+}
+// --- CANVAS 2D FALLBACK ---
+class CanvasRenderer {
+constructor(container) {
+this.container = container;
+this.canvas = document.createElement('canvas');
+this.container.appendChild(this.canvas);
+this.ctx = this.canvas.getContext('2d');
+this.queue = [];
+this.transform = {x:0,y:0,scale:1};
+this.loopId = null;
+}
+init() { return true; }
+
+reset(w, h) {
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
+    const scale = Math.min(this.canvas.width / w, this.canvas.height / h) * 0.9;
+    this.transform = {
+        scale: scale,
+        x: (this.canvas.width - w * scale) / 2,
+        y: (this.canvas.height - h * scale) / 2
+    };
+    this.ctx.fillStyle = &#39;#FFF&#39;;
+    this.ctx.fillRect(0,0,this.canvas.width, this.canvas.height);
+    this.queue = [];
+
+    if(this.loopId) cancelAnimationFrame(this.loopId);
+    this.loop();
+}
+
+addStrokes(batch) {
+    batch.forEach(s =&gt; this.queue.push(s));
+}
+
+loop() {
+    this.loopId = requestAnimationFrame(this.loop.bind(this));
+    if (!STATE.isPlaying || this.queue.length === 0) return;
+
+    const count = 5 * STATE.speedMultiplier;
+
+    for(let i=0; i&lt;count &amp;&amp; this.queue.length &gt; 0; i++) {
+        const s = this.queue.shift();
+        const ctx = this.ctx;
+        ctx.beginPath();
+
+        const x0 = s.points[0] * this.transform.scale + this.transform.x;
+        const y0 = s.points[1] * this.transform.scale + this.transform.y;
+        const x1 = s.points[2] * this.transform.scale + this.transform.x;
+        const y1 = s.points[3] * this.transform.scale + this.transform.y;
+
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+
+        const c = s.color;
+        ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${s.alpha})`;
+        ctx.lineWidth = Math.max(1, s.width * this.transform.scale);
+        ctx.lineCap = &#39;round&#39;;
+        ctx.stroke();
+
+        STATE.renderedStrokes++;
+        updateProgress();
+    }
+}
+
+}
+// --- APP ORCHESTRATION ---
+let renderer;
+let worker;
+async function init() {
+const container = document.getElementById('app-container');
+// Try Pixi, fallback to Canvas
+renderer = new PixiRenderer(container);
+const success = await renderer.init();
+if (!success) {
+    document.getElementById(&#39;fallback-banner&#39;).style.display = &#39;block&#39;;
+    renderer = new CanvasRenderer(container);
+    renderer.init();
+}
+
+// Init Worker
+const blob = new Blob([document.getElementById(&#39;worker-script&#39;).textContent], {type: &quot;text/javascript&quot;});
+STATE.worker = new Worker(window.URL.createObjectURL(blob));
+
+STATE.worker.onmessage = (e) =&gt; {
+    const msg = e.data;
+    if (msg.type === &#39;READY&#39;) {
+        document.getElementById(&#39;generate-btn&#39;).innerText = &quot;GENERATE ART&quot;;
+        document.getElementById(&#39;generate-btn&#39;).disabled = false;
+    } 
+    else if (msg.type === &#39;STROKES&#39;) {
+        STATE.totalStrokes = msg.strokesSoFar; // Approximation until done
+        renderer.addStrokes(msg.strokes);
+    }
+    else if (msg.type === &#39;PROGRESS&#39;) {
+        document.getElementById(&#39;stage-label&#39;).innerText = msg.stage;
+    }
+    else if (msg.type === &#39;DONE&#39;) {
+        STATE.totalStrokes = msg.totalStrokes;
+        console.log(`Planning complete: ${msg.planningMs}ms, ${msg.totalStrokes} strokes`);
+    }
+};
+
+}
+function updateProgress() {
+if (STATE.totalStrokes === 0) return;
+const pct = Math.min(100, Math.round((STATE.renderedStrokes / STATE.totalStrokes) * 100));
+document.getElementById('progress-fill').style.width = pct + "%";
+document.getElementById('stroke-count').innerText = ${STATE.renderedStrokes} strokes;
+if (STATE.renderedStrokes &gt;= STATE.totalStrokes &amp;&amp; STATE.totalStrokes &gt; 0) {
+    document.getElementById(&#39;stage-label&#39;).innerText = &quot;Finished&quot;;
+}
+
+}
+// --- EVENT HANDLERS ---
+document.getElementById('generate-btn').addEventListener('click', async () => {
+const fileInput = document.getElementById('img-upload');
+if (!fileInput.files.length) {
+alert("Please select an image first.");
+return;
+}
+// Read Image
+const file = fileInput.files[0];
+const img = new Image();
+img.src = URL.createObjectURL(file);
+await new Promise(r =&gt; img.onload = r);
+
+// Setup scaling for planner
+const MAX_DIM = 1024;
+let w = img.width, h = img.height;
+if (w &gt; MAX_DIM || h &gt; MAX_DIM) {
+    const r = Math.min(MAX_DIM/w, MAX_DIM/h);
+    w = Math.floor(w*r);
+    h = Math.floor(h*r);
+}
+
+// Draw to temp canvas to get pixels
+const c = document.createElement(&#39;canvas&#39;);
+c.width = w; c.height = h;
+const ctx = c.getContext(&#39;2d&#39;);
+ctx.drawImage(img, 0, 0, w, h);
+const pixels = ctx.getImageData(0,0,w,h);
+
+// Reset State
+STATE.requestId++;
+STATE.isPlaying = true;
+STATE.totalStrokes = 1000; // placeholder
+STATE.renderedStrokes = 0;
+STATE.preset = document.getElementById(&#39;preset-select&#39;).value;
+STATE.quality = document.getElementById(&#39;quality-select&#39;).value;
+STATE.indicator = document.getElementById(&#39;indicator-select&#39;).value;
+STATE.seed = parseInt(document.getElementById(&#39;seed-input&#39;).value);
+
+// UI Updates
+document.getElementById(&#39;ui-panel&#39;).classList.add(&#39;collapsed&#39;);
+document.getElementById(&#39;toggle-ui&#39;).style.display = &#39;block&#39;;
+document.getElementById(&#39;status-bar&#39;).classList.remove(&#39;hidden&#39;);
+document.getElementById(&#39;playback-area&#39;).classList.remove(&#39;hidden&#39;);
+document.getElementById(&#39;stage-label&#39;).innerText = &quot;Planning...&quot;;
+document.getElementById(&#39;generate-btn&#39;).innerText = &quot;Generating...&quot;;
+document.getElementById(&#39;generate-btn&#39;).disabled = true;
+
+// Reset Renderer
+renderer.reset(img.width, img.height); // Use original aspect ratio
+
+// Init Worker
+STATE.worker.postMessage({
+    type: &#39;INIT&#39;,
+    requestId: STATE.requestId,
+    config: {
+        seed: STATE.seed,
+        preset: STATE.preset,
+        quality: STATE.quality
+    }
+});
+
+// Send Image
+STATE.worker.postMessage({
+    type: &#39;IMAGE&#39;,
+    requestId: STATE.requestId,
+    width: w,
+    height: h,
+    buffer: pixels.data.buffer
+}, [pixels.data.buffer]);
+
+});
+// Playback Controls
+document.getElementById('btn-pause').addEventListener('click', (e) => {
+STATE.isPlaying = !STATE.isPlaying;
+e.target.innerText = STATE.isPlaying ? "Pause" : "Play";
+});
+[1, 2, 4].forEach(x => {
+document.getElementById(btn-${x}x).addEventListener('click', () => {
+STATE.speedMultiplier = x;
+});
+});
+// UI Toggle
+document.getElementById('toggle-ui').addEventListener('click', () => {
+document.getElementById('ui-panel').classList.remove('collapsed');
+document.getElementById('toggle-ui').style.display = 'none';
+});
+document.getElementById('rnd-seed-btn').addEventListener('click', () => {
+document.getElementById('seed-input').value = Math.floor(Math.random() * 100000);
+});
+// Boot
+window.onload = init;
+</script>
+</body>
+</html>
